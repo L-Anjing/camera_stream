@@ -7,10 +7,14 @@
 ///     -p camera_name:=cam_left \
 ///     -p image_width:=1280 \
 ///     -p image_height:=720 \
-///     -p framerate:=30
+///     -p framerate:=30 \
+///     -p pixel_format:=MJPEG
 
 #include <chrono>
+#include <algorithm>
+#include <cctype>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include <rclcpp/rclcpp.hpp>
@@ -29,12 +33,14 @@ public:
     declare_parameter<int>("image_width", 1280);
     declare_parameter<int>("image_height", 720);
     declare_parameter<int>("framerate", 30);
+    declare_parameter<std::string>("pixel_format", "MJPEG");
 
     device_      = get_parameter("device").as_string();
     camera_name_ = get_parameter("camera_name").as_string();
     width_       = get_parameter("image_width").as_int();
     height_      = get_parameter("image_height").as_int();
     fps_         = get_parameter("framerate").as_int();
+    pixel_format_ = get_parameter("pixel_format").as_string();
 
     // ── 打开摄像头 ──
     cap_.open(device_, cv::CAP_V4L2);
@@ -43,9 +49,8 @@ public:
       throw std::runtime_error("Camera open failed: " + device_);
     }
 
-    // ── 设置 MJPEG 格式 + 分辨率 ──
-    cap_.set(cv::CAP_PROP_FOURCC,
-             cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+    // ── 设置编码格式 + 分辨率 ──
+    cap_.set(cv::CAP_PROP_FOURCC, fourcc_from_string(pixel_format_));
     cap_.set(cv::CAP_PROP_FRAME_WIDTH, width_);
     cap_.set(cv::CAP_PROP_FRAME_HEIGHT, height_);
     cap_.set(cv::CAP_PROP_FPS, fps_);
@@ -67,8 +72,8 @@ public:
     RCLCPP_INFO(get_logger(), "===========================================");
     RCLCPP_INFO(get_logger(), "  CameraNode [%s]", camera_name_.c_str());
     RCLCPP_INFO(get_logger(), "  Device: %s", device_.c_str());
-    RCLCPP_INFO(get_logger(), "  Req: %dx%d @ %d MJPEG",
-                width_, height_, fps_);
+    RCLCPP_INFO(get_logger(), "  Req: %dx%d @ %d %s",
+                width_, height_, fps_, pixel_format_.c_str());
     RCLCPP_INFO(get_logger(), "  Act: %dx%d @ %.1f",
                 (int)actual_w, (int)actual_h, actual_fps);
     RCLCPP_INFO(get_logger(), "  Pub: /%s/image_raw", camera_name_.c_str());
@@ -78,6 +83,19 @@ public:
   ~CameraNode() { if (cap_.isOpened()) cap_.release(); }
 
 private:
+  int fourcc_from_string(std::string format) const {
+    std::transform(format.begin(), format.end(), format.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    if (format == "MJPEG" || format == "MJPG") {
+      return cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+    }
+    if (format == "YUYV" || format == "YUY2") {
+      return cv::VideoWriter::fourcc('Y', 'U', 'Y', 'V');
+    }
+    RCLCPP_WARN(get_logger(), "Unknown pixel_format=%s, fallback to MJPEG", format.c_str());
+    return cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+  }
+
   void timer_cb() {
     cv::Mat frame;
     if (!cap_.read(frame) || frame.empty()) {
@@ -91,7 +109,7 @@ private:
     pub_->publish(*msg);
   }
 
-  std::string device_, camera_name_;
+  std::string device_, camera_name_, pixel_format_;
   int width_, height_, fps_;
   cv::VideoCapture cap_;
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_;

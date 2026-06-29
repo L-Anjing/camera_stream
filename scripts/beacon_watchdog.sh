@@ -9,6 +9,9 @@
 set -uo pipefail
 
 PIDFILE=/tmp/beacon_watchdog.pid
+WORKSPACE_DIR=${WORKSPACE_DIR:-$HOME/workspace}
+COLOR_SERIAL_PORT=${COLOR_SERIAL_PORT:-/dev/ttyACM0}
+SERIAL_BAUD=${SERIAL_BAUD:-115200}
 
 # ── 状态管理 ──
 if [ "${1:-}" = "--stop" ]; then
@@ -32,8 +35,27 @@ log() { echo "[BEACON-WD][$(date '+%F %T')] $*"; }
 
 load_env() {
     set +u; source /opt/ros/humble/setup.bash || return 1
-    source ~/workspace/install/setup.bash 2>/dev/null || true
+    source "$WORKSPACE_DIR/install/setup.bash" 2>/dev/null || true
     set -u; return 0
+}
+
+wait_for_topic() {
+    local topic="$1"
+    local timeout="${2:-30}"
+    local start_ts
+    start_ts=$(date +%s)
+    while true; do
+        [ "$STOP_REQUESTED" = "1" ] && return 1
+        if ros2 topic list 2>/dev/null | grep -qx "$topic"; then
+            log "Topic ready: $topic"
+            return 0
+        fi
+        if [ $(( $(date +%s) - start_ts )) -ge "$timeout" ]; then
+            log "Timeout waiting topic: $topic"
+            return 1
+        fi
+        sleep 0.5
+    done
 }
 
 LAUNCH_PID=""; TAIL_PID=""; STOP_REQUESTED=0
@@ -60,9 +82,16 @@ log "ROS ready"
 
 while true; do
     [ "$STOP_REQUESTED" = "1" ] && break
+
+    log "Waiting camera topics before color_detect..."
+    wait_for_topic "/cam_left/image_raw" 30 || { log "Left camera topic not ready"; sleep 1; continue; }
+    wait_for_topic "/cam_right/image_raw" 30 || { log "Right camera topic not ready"; sleep 1; continue; }
+
     LOG=$(mktemp /tmp/beacon_launch_XXXX.log)
     log "Launching color_detect + serial"
     ros2 launch color_detect color_detect_all.launch.py \
+        serial_port:="$COLOR_SERIAL_PORT" \
+        serial_baud:="$SERIAL_BAUD" \
         > "$LOG" 2>&1 &
     LAUNCH_PID=$!; log "PID=$LAUNCH_PID"
     stdbuf -oL tail -n 0 --pid="$LAUNCH_PID" -f "$LOG" & TAIL_PID=$!

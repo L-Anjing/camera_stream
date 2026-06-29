@@ -19,5 +19,6 @@ ament_target_dependencies(camera_node rclcpp sensor_msgs cv_bridge)
 
 install(TARGETS camera_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
 
 ament_package()

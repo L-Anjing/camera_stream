@@ -4,7 +4,9 @@
 
 独立的 USB 摄像头 ROS2 发布节点，走 V4L2 + MJPEG 推流。
 
-与 `color_detect`（灯带信标检测）完全分离，可独立启动、独立 watchdog 管理。
+与 `color_detect` 和 `camera_bridge` 的检测节点完全分离，只负责发布图像 topic。
+
+当前默认使用双摄 `MJPEG 1280x720 @ 30FPS`。
 
 ## 依赖
 
@@ -37,8 +39,11 @@ ros2 run camera_stream camera_node --ros-args \
   -p camera_name:=cam_left \
   -p image_width:=1280 \
   -p image_height:=720 \
-  -p framerate:=30
+  -p framerate:=30 \
+  -p pixel_format:=MJPEG
 ```
+
+默认参数写在 [config/camera_stream.yaml](/home/li/workspace/src/camera_stream/config/camera_stream.yaml)。实际部署优先改这个文件，检测节点只需要订阅 topic。
 
 ## 参数
 
@@ -49,8 +54,9 @@ ros2 run camera_stream camera_node --ros-args \
 | `image_width` | `1280` | 目标宽度 |
 | `image_height` | `720` | 目标高度 |
 | `framerate` | `30` | 目标帧率 |
+| `pixel_format` | `MJPEG` | V4L2 编码格式 |
 
-相机自动设置为 MJPEG 格式。实际生效参数取决于硬件和 V4L2 驱动。
+相机格式按配置文件设置。实际生效参数取决于硬件和 V4L2 驱动。
 
 ## 设备绑定（udev）
 
@@ -66,8 +72,8 @@ SUBSYSTEM=="video4linux", KERNEL=="video[0-9]*", \
 
 | 话题 | 类型 | 说明 |
 |------|------|------|
-| `/cam_left/image_raw` | `sensor_msgs/Image` | 左摄像头 bgr8 |
-| `/cam_right/image_raw` | `sensor_msgs/Image` | 右摄像头 bgr8 |
+| `/cam_left/image_raw` | `sensor_msgs/Image` | 左摄像头 bgr8，默认 1280x720@30/MJPEG |
+| `/cam_right/image_raw` | `sensor_msgs/Image` | 右摄像头 bgr8，默认 1280x720@30/MJPEG |
 
 ## Watchdog
 

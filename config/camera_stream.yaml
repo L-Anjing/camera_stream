@@ -1,0 +1,19 @@
+# USB 双摄像头发布配置
+# 相机规格支持 MJPEG 720p 30FPS，这里先统一使用 1280x720@30。
+/cam_left:
+  ros__parameters:
+    device: /dev/camera_left
+    camera_name: cam_left
+    image_width: 1280
+    image_height: 720
+    framerate: 30
+    pixel_format: MJPEG
+
+/cam_right:
+  ros__parameters:
+    device: /dev/camera_right
+    camera_name: cam_right
+    image_width: 1280
+    image_height: 720
+    framerate: 30
+    pixel_format: MJPEG
